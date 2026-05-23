@@ -1,7 +1,14 @@
-import * as dotenv from 'dotenv';
-dotenv.config(); 
+import 'dotenv/config';
+
+console.log("Checking Environment Variables...");
+console.log("TELEGRAM_TOKEN:", process.env.TELEGRAM_TOKEN ? "Loaded" : "MISSING!");
 
 import { bot } from './src/lib/bot';
+
+if (!bot) {
+    console.error("CRITICAL ERROR: The bot object is undefined. The export in src/lib/bot.ts failed.");
+    process.exit(1);
+}
 
 console.log('Classroom Companion Bot is booting up...');
 bot.launch();
