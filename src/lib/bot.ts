@@ -34,21 +34,57 @@ bot.on('text', async (ctx) => {
       return;
     }
 
-    console.log(`[Bot] Received message from ${ctx.from.first_name}: ${message}`);
+    const user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) return;
+
     const loadingMessage = await ctx.reply("Processing with AI...");
-    
     const intent = await llm.parseIntent(message);
-    console.log(`[Bot] AI parsed intent:`, intent);
     
-    await ctx.telegram.editMessageText(
-      ctx.chat.id, 
-      loadingMessage.message_id, 
-      undefined, 
-      `System detected intent: ${intent.type}`
+    if (intent.type === 'ASSIGN_WORK' && user.role === 'TEACHER') {
+      
+      const deadlineDate = new Date();
+      deadlineDate.setDate(deadlineDate.getDate() + (intent.deadlineDays || 1));
+
+      const firstStudent = await prisma.user.findFirst({ where: { role: 'STUDENT' } });
+
+      if (!firstStudent) {
+        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+          `I understood the assignment, but you have no registered students in the database yet!`
+        );
+        return;
+      }
+
+      await prisma.assignment.create({
+        data: {
+          description: intent.description,
+          deadline: deadlineDate,
+          studentId: firstStudent.id,
+          teacherId: user.id,
+          status: 'PENDING'
+        }
+      });
+
+      try {
+        await ctx.telegram.sendMessage(
+          firstStudent.telegramId,
+          ` New Assignment from your Teacher!\n\nTask: ${intent.description}\nDue: ${deadlineDate.toDateString()}\n\nWhen you start, just reply here with "I started" or "Stuck" to update your status!`
+        );
+      } catch (err) {
+        console.error("Could not message student:", err);
+      }
+
+      await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+        ` Assignment Created & Sent to ${firstStudent.name}!\n\nTask: ${intent.description}\nDue: ${deadlineDate.toDateString()}`
+      );
+      return;
+    }
+
+    await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+      `System detected intent: ${intent.type}. (More features coming soon!)`
     );
 
   } catch (error) {
     console.error("FATAL AI ERROR:", error);
-    await ctx.reply("Whoops! The AI connection failed. Check your VS Code terminal.");
+    await ctx.reply("Whoops, The AI connection failed.");
   }
 });

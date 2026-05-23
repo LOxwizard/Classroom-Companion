@@ -16,8 +16,15 @@ export class LLMService {
   }
 
   async parseIntent(message: string): Promise<any> {
-    const systemPrompt = 'Extract the intent from the user message. Return a JSON object with a "type" key containing one of: ASSIGN_WORK, STATUS_UPDATE, REGISTER, or UNKNOWN.';
-
+   const systemPrompt = `You are a strict data extraction assistant. 
+    Analyze the user's message and return a JSON object with a "type" key (ASSIGN_WORK, STATUS_UPDATE, or UNKNOWN).
+    
+    IF the type is ASSIGN_WORK, you MUST also extract these keys:
+    - "studentName": The name of the student.
+    - "description": The actual task or assignment.
+    - "deadlineDays": An integer representing how many days from today the assignment is due (e.g., if "tomorrow", return 1. if "next week", return 7).
+    
+    Return ONLY valid JSON.`;
     if (this.provider === 'openai' && this.openAIClient) {
       const response = await this.openAIClient.chat.completions.create({
         model: 'gpt-4o-mini',
