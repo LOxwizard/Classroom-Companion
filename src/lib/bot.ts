@@ -41,7 +41,6 @@ bot.on('text', async (ctx) => {
     const intent = await llm.parseIntent(message);
     
     if (intent.type === 'ASSIGN_WORK' && user.role === 'TEACHER') {
-      
       const deadlineDate = new Date();
       deadlineDate.setDate(deadlineDate.getDate() + (intent.deadlineDays || 1));
 
@@ -75,6 +74,43 @@ bot.on('text', async (ctx) => {
 
       await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
         ` Assignment Created & Sent to ${firstStudent.name}!\n\nTask: ${intent.description}\nDue: ${deadlineDate.toDateString()}`
+      );
+      return;
+    }
+
+    if (intent.type === 'STATUS_UPDATE' && user.role === 'STUDENT') {
+      const activeAssignment = await prisma.assignment.findFirst({
+        where: { 
+          studentId: user.id,
+          status: { not: 'COMPLETED' } 
+        },
+        orderBy: { deadline: 'asc' },
+        include: { teacher: true }
+      });
+
+      if (!activeAssignment) {
+        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+          "You don't have any active assignments to update right now!"
+        );
+        return;
+      }
+
+      await prisma.assignment.update({
+        where: { id: activeAssignment.id },
+        data: { status: intent.status }
+      });
+
+      try {
+        await ctx.telegram.sendMessage(
+          activeAssignment.teacher.telegramId,
+          ` Status Update!\n\n${user.name} is now marking their assignment ("${activeAssignment.description}") as: ${intent.status}`
+        );
+      } catch (err) {
+        console.error("Could not message teacher:", err);
+      }
+
+      await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+        ` Got it! I've marked your assignment as ${intent.status} and notified your teacher.`
       );
       return;
     }

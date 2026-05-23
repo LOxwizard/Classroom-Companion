@@ -19,10 +19,13 @@ export class LLMService {
    const systemPrompt = `You are a strict data extraction assistant. 
     Analyze the user's message and return a JSON object with a "type" key (ASSIGN_WORK, STATUS_UPDATE, or UNKNOWN).
     
-    IF the type is ASSIGN_WORK, you MUST also extract these keys:
+    IF the type is ASSIGN_WORK:
     - "studentName": The name of the student.
-    - "description": The actual task or assignment.
-    - "deadlineDays": An integer representing how many days from today the assignment is due (e.g., if "tomorrow", return 1. if "next week", return 7).
+    - "description": The actual task.
+    - "deadlineDays": Integer of days from today.
+
+    IF the type is STATUS_UPDATE:
+    - "status": MUST be either "COMPLETED" or "STUCK".
     
     Return ONLY valid JSON.`;
     if (this.provider === 'openai' && this.openAIClient) {
