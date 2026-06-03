@@ -1,35 +1,29 @@
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 
+const openAIClient = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const geminiClient = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+
 export class LLMService {
-  provider: string;
-  openAIClient: OpenAI | null = null;
-  geminiClient: GoogleGenAI | null = null;
-
-  constructor(provider: string = 'openai') {
-    this.provider = provider;
-    if (provider === 'openai') {
-      this.openAIClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    } else if (provider === 'gemini') {
-      this.geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    }
-  }
-
-  async parseIntent(message: string): Promise<any> {
+  static async parseIntent(message: string, provider: string = 'gemini'): Promise<any> {
    const systemPrompt = `You are a strict data extraction assistant. 
-    Analyze the user's message and return a JSON object with a "type" key (ASSIGN_WORK, STATUS_UPDATE, or UNKNOWN).
+    Analyze the user's message and return a JSON object with a "type" key (ASSIGN_WORK, STATUS_UPDATE, SUBMIT_WORK, or UNKNOWN).
     
     IF the type is ASSIGN_WORK:
     - "studentName": The name of the student.
     - "description": The actual task.
     - "deadlineDays": Integer of days from today.
-
+    
     IF the type is STATUS_UPDATE:
     - "status": MUST be either "COMPLETED" or "STUCK".
+
+    IF the type is SUBMIT_WORK:
+    - "submissionText": The actual text the user is submitting for their assignment.
     
     Return ONLY valid JSON.`;
-    if (this.provider === 'openai' && this.openAIClient) {
-      const response = await this.openAIClient.chat.completions.create({
+    
+    if (provider === 'openai' && openAIClient) {
+      const response = await openAIClient.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
@@ -40,8 +34,8 @@ export class LLMService {
       return JSON.parse(response.choices[0].message.content || '{}');
     } 
     
-    if (this.provider === 'gemini' && this.geminiClient) {
-      const response = await this.geminiClient.models.generateContent({
+    if (provider === 'gemini' && geminiClient) {
+      const response = await geminiClient.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: message,
         config: {

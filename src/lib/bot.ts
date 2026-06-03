@@ -1,11 +1,9 @@
 import { Telegraf } from 'telegraf';
 import { PrismaClient } from '@prisma/client';
 import { LLMService } from './llm';
-import 'dotenv/config';
 
-export const prisma = new PrismaClient();
-export const bot = new Telegraf(process.env.TELEGRAM_TOKEN as string);
-const llm = new LLMService('gemini');
+const prisma = new PrismaClient();
+export const bot = new Telegraf(process.env.TELEGRAM_TOKEN || '');
 
 bot.start(async (ctx) => {
   const telegramId = ctx.from.id.toString();
@@ -17,110 +15,218 @@ bot.start(async (ctx) => {
     create: { telegramId, name, role: 'PENDING' },
   });
 
-  await ctx.reply(`Welcome ${name}! Are you a TEACHER or a STUDENT? Reply with your role.`);
+  await ctx.reply(
+    `Welcome ${name}!\n\nYour unique Login ID is: ${telegramId}\nKeep this safe, you will need it to access the web dashboard.\n\nAre you a TEACHER or a STUDENT? Reply with your role.`
+  );
+});
+
+bot.command('login', async (ctx) => {
+  const telegramId = ctx.from.id.toString();
+  await ctx.reply(
+    `Your Login ID is: ${telegramId}\n\nYou can log in here: http://localhost:3000`
+  );
 });
 
 bot.on('text', async (ctx) => {
+  const userMessage = ctx.message.text;
+  const telegramId = ctx.from.id.toString();
+
+  if (userMessage.toUpperCase() === 'TEACHER' || userMessage.toUpperCase() === 'STUDENT') {
+    await prisma.user.update({
+      where: { telegramId },
+      data: { role: userMessage.toUpperCase() }
+    });
+    await ctx.reply(`Role updated to ${userMessage.toUpperCase()}! You can now use the bot.`);
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  if (!user || user.role === 'PENDING') {
+    await ctx.reply("Please set your role first by replying 'TEACHER' or 'STUDENT'.");
+    return;
+  }
+
+  const loadingMessage = await ctx.reply("Thinking...");
+
   try {
-    const message = ctx.message.text.trim();
-    const telegramId = ctx.from.id.toString();
+    const intent = await LLMService.parseIntent(userMessage);
 
-    if (message.toUpperCase() === 'TEACHER' || message.toUpperCase() === 'STUDENT') {
-      await prisma.user.update({
-        where: { telegramId },
-        data: { role: message.toUpperCase() },
-      });
-      await ctx.reply(`Awesome! Your role is officially set to ${message.toUpperCase()} in the database.`);
-      return;
-    }
-
-    const user = await prisma.user.findUnique({ where: { telegramId } });
-    if (!user) return;
-
-    const loadingMessage = await ctx.reply("Processing with AI...");
-    const intent = await llm.parseIntent(message);
-    
     if (intent.type === 'ASSIGN_WORK' && user.role === 'TEACHER') {
-      const deadlineDate = new Date();
-      deadlineDate.setDate(deadlineDate.getDate() + (intent.deadlineDays || 1));
-
-      const firstStudent = await prisma.user.findFirst({ where: { role: 'STUDENT' } });
-
-      if (!firstStudent) {
-        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-          `I understood the assignment, but you have no registered students in the database yet!`
+      if (!intent.studentName) {
+         await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+          "I couldn't catch the student's name. Please try again!"
         );
         return;
       }
 
+      const student = await prisma.user.findFirst({ 
+        where: { name: { contains: intent.studentName }, role: 'STUDENT' } 
+      });
+      
+      if (!student) {
+        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+          `I couldn't find a student named "${intent.studentName}" in the system. Make sure they have registered via the bot!`
+        );
+        return;
+      }
+
+      const existingTask = await prisma.assignment.findFirst({
+        where: {
+          studentId: student.id,
+          description: intent.description,
+          status: { not: 'COMPLETED' }
+        }
+      });
+
+      if (existingTask) {
+        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+          `${student.name} already has this exact task assigned to them, and they haven't completed it yet!`
+        );
+        return;
+      }
+
+      const deadline = new Date();
+      deadline.setDate(deadline.getDate() + (intent.deadlineDays || 1));
+
       await prisma.assignment.create({
         data: {
           description: intent.description,
-          deadline: deadlineDate,
-          studentId: firstStudent.id,
+          deadline: deadline,
           teacherId: user.id,
+          studentId: student.id,
           status: 'PENDING'
         }
       });
 
-      try {
-        await ctx.telegram.sendMessage(
-          firstStudent.telegramId,
-          ` New Assignment from your Teacher!\n\nTask: ${intent.description}\nDue: ${deadlineDate.toDateString()}\n\nWhen you start, just reply here with "I started" or "Stuck" to update your status!`
-        );
-      } catch (err) {
-        console.error("Could not message student:", err);
-      }
-
+      await ctx.telegram.sendMessage(
+        student.telegramId, 
+        `New Assignment from ${user.name}!\n\nTask: ${intent.description}\nDue in ${intent.deadlineDays} days.`
+      );
+      
       await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-        ` Assignment Created & Sent to ${firstStudent.name}!\n\nTask: ${intent.description}\nDue: ${deadlineDate.toDateString()}`
+        `Task successfully assigned to ${student.name}!`
       );
       return;
     }
 
     if (intent.type === 'STATUS_UPDATE' && user.role === 'STUDENT') {
       const activeAssignment = await prisma.assignment.findFirst({
-        where: { 
-          studentId: user.id,
-          status: { not: 'COMPLETED' } 
-        },
+        where: { studentId: user.id, status: { not: 'COMPLETED' } },
         orderBy: { deadline: 'asc' },
         include: { teacher: true }
       });
-
-      if (!activeAssignment) {
-        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-          "You don't have any active assignments to update right now!"
-        );
-        return;
-      }
+      
+      if (!activeAssignment) throw new Error("No active assignments.");
 
       await prisma.assignment.update({
         where: { id: activeAssignment.id },
         data: { status: intent.status }
       });
 
-      try {
-        await ctx.telegram.sendMessage(
-          activeAssignment.teacher.telegramId,
-          ` Status Update!\n\n${user.name} is now marking their assignment ("${activeAssignment.description}") as: ${intent.status}`
+      await ctx.telegram.sendMessage(
+        activeAssignment.teacher.telegramId, 
+        `Status Update!\n\n${user.name} is now marking their assignment as: ${intent.status}.`
+      );
+      
+      await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+        `Status updated to ${intent.status} and your teacher has been notified!`
+      );
+      return;
+    }
+
+    if (intent.type === 'SUBMIT_WORK' && user.role === 'STUDENT') {
+      const activeAssignment = await prisma.assignment.findFirst({
+        where: { studentId: user.id, status: { not: 'COMPLETED' } },
+        orderBy: { deadline: 'asc' },
+        include: { teacher: true }
+      });
+
+      if (!activeAssignment) {
+        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+          "You don't have any active assignments to submit right now."
         );
-      } catch (err) {
-        console.error("Could not message teacher:", err);
+        return;
       }
 
+      await prisma.assignment.update({
+        where: { id: activeAssignment.id },
+        data: { 
+          status: 'COMPLETED',
+          submission: intent.submissionText 
+        }
+      });
+
+      await ctx.telegram.sendMessage(
+        activeAssignment.teacher.telegramId,
+        `New Submission!\n\n${user.name} just submitted their work for: "${activeAssignment.description}"\n\nText: ${intent.submissionText}`
+      );
+
       await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-        ` Got it! I've marked your assignment as ${intent.status} and notified your teacher.`
+        `Submission received! I've marked it as COMPLETED and sent it to your teacher.`
       );
       return;
     }
 
     await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-      `System detected intent: ${intent.type}. (More features coming soon!)`
+      "I didn't quite catch that. Try rephrasing what you want to do!"
     );
 
   } catch (error) {
-    console.error("FATAL AI ERROR:", error);
-    await ctx.reply("Whoops, The AI connection failed.");
+    console.error("Bot Error:", error);
+    await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+      "Sorry, I ran into an error processing that request."
+    );
+  }
+});
+
+bot.on(['photo', 'document'], async (ctx) => {
+  try {
+    const telegramId = ctx.from.id.toString();
+    const user = await prisma.user.findUnique({ where: { telegramId } });
+    
+    if (!user || user.role !== 'STUDENT') return;
+
+    const activeAssignment = await prisma.assignment.findFirst({
+      where: { studentId: user.id, status: { not: 'COMPLETED' } },
+      orderBy: { deadline: 'asc' },
+      include: { teacher: true }
+    });
+
+    if (!activeAssignment) {
+      await ctx.reply("You don't have any active assignments to submit files for right now!");
+      return;
+    }
+
+    const loadingMessage = await ctx.reply("Uploading file to dashboard...");
+
+    let fileId = '';
+    if ('photo' in ctx.message) {
+      fileId = ctx.message.photo.pop()!.file_id; 
+    } else if ('document' in ctx.message) {
+      fileId = ctx.message.document.file_id;
+    }
+
+    const fileUrl = await ctx.telegram.getFileLink(fileId);
+
+    await prisma.assignment.update({
+      where: { id: activeAssignment.id },
+      data: { 
+        status: 'COMPLETED',
+        submission: fileUrl.href 
+      }
+    });
+
+    await ctx.telegram.sendMessage(
+      activeAssignment.teacher.telegramId,
+      `New File Submission!\n\n${user.name} just submitted a file for: "${activeAssignment.description}"`
+    );
+
+    await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+      `File securely uploaded! I've marked your assignment as COMPLETED and notified your teacher.`
+    );
+
+  } catch (error) {
+    console.error("File upload error:", error);
+    await ctx.reply("Sorry, I had trouble processing that file.");
   }
 });

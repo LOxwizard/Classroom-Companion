@@ -1,9 +1,14 @@
 import { PrismaClient } from '@prisma/client';
+import Link from 'next/link';
 
 const prisma = new PrismaClient();
 
-export default async function TeacherDashboard() {
+export default async function TeacherDashboard({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
+  const resolvedParams = await searchParams;
+  const teacherId = parseInt(resolvedParams.id || '0');
+
   const assignments = await prisma.assignment.findMany({
+    where: { teacherId: teacherId },
     include: {
       student: true,
       teacher: true,
@@ -16,12 +21,14 @@ export default async function TeacherDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-6xl mx-auto">
-        
         <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">Teacher Command Center</h1>
             <p className="text-slate-500 mt-2 text-lg">Monitor student progress and track active assignments.</p>
           </div>
+          <Link href="/" className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl transition-colors">
+            Log Out
+          </Link>
         </header>
 
         {assignments.length === 0 ? (
@@ -40,7 +47,7 @@ export default async function TeacherDashboard() {
                   <div className="flex justify-between items-start mb-5">
                     <span className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md ${
                       assignment.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 
-                      assignment.status === 'STUCK' ? 'bg-rose-100 text-rose-700 text-animate-pulse' : 
+                      assignment.status === 'STUCK' ? 'bg-rose-100 text-rose-700 animate-pulse' : 
                       'bg-amber-100 text-amber-700'
                     }`}>
                       {assignment.status}
