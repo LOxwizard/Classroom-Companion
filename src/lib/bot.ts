@@ -9,15 +9,21 @@ bot.start(async (ctx) => {
   const telegramId = ctx.from.id.toString();
   const name = ctx.from.first_name;
   
-  await prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { telegramId },
     update: { name },
     create: { telegramId, name, role: 'PENDING' },
   });
 
-  await ctx.reply(
-    `Welcome ${name}!\n\nYour unique Login ID is: ${telegramId}\nKeep this safe, you will need it to access the web dashboard.\n\nAre you a TEACHER or a STUDENT? Reply with your role.`
-  );
+  if (user.role === 'PENDING') {
+    await ctx.reply(
+      `Welcome ${name}!\n\nYour unique Login ID is: ${telegramId}\nKeep this safe, you will need it to access the web dashboard.\n\nAre you a TEACHER or a STUDENT? Reply with your role.`
+    );
+  } else {
+    await ctx.reply(
+      `Welcome back, ${name}!\n\nyou are registered as a ${user.role}.\nYou can jump right back into chatting with me, or log into your dashboard at: http://localhost:3000`
+    );
+  }
 });
 
 bot.command('login', async (ctx) => {
@@ -30,20 +36,25 @@ bot.command('login', async (ctx) => {
 bot.on('text', async (ctx) => {
   const userMessage = ctx.message.text;
   const telegramId = ctx.from.id.toString();
-
-  if (userMessage.toUpperCase() === 'TEACHER' || userMessage.toUpperCase() === 'STUDENT') {
-    await prisma.user.update({
-      where: { telegramId },
-      data: { role: userMessage.toUpperCase() }
-    });
-    await ctx.reply(`Role updated to ${userMessage.toUpperCase()}! You can now use the bot.`);
+  const user = await prisma.user.findUnique({ where: { telegramId } });
+  
+  if (!user) {
+    await ctx.reply("Please type /start to initialize your account!");
     return;
   }
 
-  const user = await prisma.user.findUnique({ where: { telegramId } });
-  if (!user || user.role === 'PENDING') {
-    await ctx.reply("Please set your role first by replying 'TEACHER' or 'STUDENT'.");
-    return;
+  if (user.role === 'PENDING') {
+    if (userMessage.toUpperCase() === 'TEACHER' || userMessage.toUpperCase() === 'STUDENT') {
+      await prisma.user.update({
+        where: { telegramId },
+        data: { role: userMessage.toUpperCase() }
+      });
+      await ctx.reply(`Role successfully set to ${userMessage.toUpperCase()}! You can now use the bot.`);
+      return;
+    } else {
+      await ctx.reply("Please set your role first by replying 'TEACHER' or 'STUDENT'.");
+      return;
+    }
   }
 
   const loadingMessage = await ctx.reply("Thinking...");
@@ -51,7 +62,6 @@ bot.on('text', async (ctx) => {
   try {
     const intent = await LLMService.parseIntent(userMessage);
 
-    // --- TEACHER: Assign Work ---
     if (intent.type === 'ASSIGN_WORK' && user.role === 'TEACHER') {
       if (!intent.studentName) {
          await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
@@ -87,7 +97,9 @@ bot.on('text', async (ctx) => {
       }
 
       const deadline = new Date();
-      deadline.setDate(deadline.getDate() + (intent.deadlineDays || 1));
+      const hoursToAdd = ((intent.deadlineDays || 1) * 24) - 1; 
+      deadline.setHours(deadline.getHours() + hoursToAdd);
+
 
       await prisma.assignment.create({
         data: {
@@ -200,7 +212,6 @@ bot.on('text', async (ctx) => {
       return;
     }
 
-    // --- UNKNOWN INTENT ---
     await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
       "I didn't quite catch that. Try rephrasing what you want to do!"
     );

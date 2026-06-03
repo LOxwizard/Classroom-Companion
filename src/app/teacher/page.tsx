@@ -1,11 +1,36 @@
 import { PrismaClient } from '@prisma/client';
 import Link from 'next/link';
+import { revalidatePath } from 'next/cache';
+import { Telegraf } from 'telegraf';
 
 const prisma = new PrismaClient();
+const bot = new Telegraf(process.env.TELEGRAM_TOKEN || '');
 
 export default async function TeacherDashboard({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const resolvedParams = await searchParams;
   const teacherId = parseInt(resolvedParams.id || '0');
+
+  async function submitGrade(formData: FormData) {
+    'use server';
+    
+    const assignmentId = parseInt(formData.get('assignmentId') as string);
+    const studentTelegramId = formData.get('studentTelegramId') as string;
+    const feedback = formData.get('feedback') as string;
+
+    if (!assignmentId || !studentTelegramId || !feedback) return;
+
+    await prisma.assignment.update({
+      where: { id: assignmentId },
+      data: { status: 'GRADED' }
+    });
+
+    await bot.telegram.sendMessage(
+      studentTelegramId,
+      `📝 GRADING FEEDBACK:\n\nYour teacher just reviewed your assignment!\n\nFeedback: "${feedback}"`
+    );
+
+    revalidatePath('/teacher');
+  }
 
   const assignments = await prisma.assignment.findMany({
     where: { teacherId: teacherId },
@@ -17,6 +42,11 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
       deadline: 'asc',
     },
   });
+
+  const isUrl = (text: string | null) => {
+    if (!text) return false;
+    return text.startsWith('http://') || text.startsWith('https://');
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
@@ -41,13 +71,16 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
             {assignments.map((assignment) => (
               <div 
                 key={assignment.id} 
-                className="group relative bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all duration-300 ease-out flex flex-col justify-between"
+                className={`group relative bg-white p-6 rounded-2xl border shadow-sm transition-all duration-300 flex flex-col justify-between ${
+                  assignment.status === 'GRADED' ? 'border-purple-200 opacity-75' : 'border-slate-200 hover:shadow-xl hover:border-blue-300'
+                }`}
               >
                 <div>
                   <div className="flex justify-between items-start mb-5">
                     <span className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md ${
                       assignment.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 
                       assignment.status === 'STUCK' ? 'bg-rose-100 text-rose-700 animate-pulse' : 
+                      assignment.status === 'GRADED' ? 'bg-purple-100 text-purple-700' : 
                       'bg-amber-100 text-amber-700'
                     }`}>
                       {assignment.status}
@@ -58,7 +91,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
                   </div>
 
                   <div className="mb-6">
-                    <h2 className="text-xl font-semibold text-slate-900 mb-3 leading-snug group-hover:text-blue-600 transition-colors duration-200">
+                    <h2 className={`text-xl font-semibold mb-3 leading-snug ${assignment.status === 'GRADED' ? 'text-slate-500' : 'text-slate-900 group-hover:text-blue-600'}`}>
                       {assignment.description}
                     </h2>
                     <div className="flex items-center gap-2 mt-4 bg-slate-50 p-2 rounded-lg border border-slate-100">
@@ -70,16 +103,64 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
                       </p>
                     </div>
                   </div>
+
+                  {((assignment.status === 'COMPLETED' || assignment.status === 'GRADED') && (assignment as any).submission) && (
+                    <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Submitted Work</p>
+                      
+                      {isUrl((assignment as any).submission) ? (
+                        <a 
+                          href={(assignment as any).submission} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium rounded-lg transition-colors border border-blue-200"
+                        >
+                          View Attached File
+                        </a>
+                      ) : (
+                        <div className="max-h-32 overflow-y-auto custom-scrollbar">
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap italic">
+                            "{(assignment as any).submission}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {assignment.status === 'COMPLETED' && (
+                    <form action={submitGrade} className="mt-4 flex flex-col gap-3">
+                      <input type="hidden" name="assignmentId" value={assignment.id} />
+                      <input type="hidden" name="studentTelegramId" value={assignment.student?.telegramId} />
+                      <textarea 
+                        name="feedback" 
+                        required
+                        placeholder="Type grade and feedback (e.g., A - Great job!)"
+                        className="w-full text-sm p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        rows={2}
+                      ></textarea>
+                      <button 
+                        type="submit"
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition-colors shadow-sm"
+                      >
+                        Send Grade to Student
+                      </button>
+                    </form>
+                  )}
+
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 mt-auto flex justify-between items-center">
+                <div className="pt-4 border-t border-slate-100 mt-6 flex justify-between items-center">
                   {assignment.status === 'STUCK' ? (
                     <div className="flex items-center gap-2 text-rose-500">
                       <p className="text-xs font-bold uppercase tracking-wide">Needs your help</p>
                     </div>
+                  ) : assignment.status === 'GRADED' ? (
+                    <div className="flex items-center gap-2 text-purple-500">
+                      <p className="text-xs font-bold uppercase tracking-wide">Successfully Graded</p>
+                    </div>
                   ) : assignment.status === 'COMPLETED' ? (
                     <div className="flex items-center gap-2 text-emerald-500">
-                      <p className="text-xs font-bold uppercase tracking-wide">Ready for review</p>
+                      <p className="text-xs font-bold uppercase tracking-wide">Waiting for grade</p>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-slate-400">
