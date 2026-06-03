@@ -274,3 +274,12 @@ bot.on(['photo', 'document'], async (ctx) => {
     await ctx.reply("Sorry, I had trouble processing that file.");
   }
 });
+
+bot.launch().then(() => {
+  console.log("Bot is running!");
+}).catch((err) => {
+  console.error("Failed to start bot:", err);
+});
+
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
