@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Classroom Companion
+Classroom Companion is an AI-powered EdTech platform designed to streamline the interaction between teachers and students. By integrating a Telegram bot with a real-time web dashboard, it automates assignment tracking, status updates, and grading, allowing educators to focus on teaching rather than administration.
 
-## Getting Started
+Key Features
+Natural Language Assignment Creation: Teachers can assign tasks using natural language via Telegram; an AI engine parses the intent, deadline, and target student.
 
-First, run the development server:
+Real-time Student Portal: Students receive automatic notifications, submit work (text or files), and can flag tasks as "Stuck" for immediate teacher intervention.
 
-```bash
+Teacher Command Center: A centralized, filtered dashboard to triage classroom needs by priority (Stuck, Needs Grading, Pending, Finished).
+
+Automated Feedback Loop: Teachers can provide grading feedback directly from the dashboard, which is instantly delivered to the student via Telegram.
+
+Intelligent Triage: The dashboard automatically sorts tasks based on urgency and status to ensure no student is left behind.
+
+Technology Stack
+Framework: Next.js (App Router)
+
+Language: TypeScript
+
+Database: PostgreSQL (via Prisma ORM)
+
+Messaging: Telegraf (Telegram Bot API)
+
+AI Engine: Google Gemini API
+
+Styling: Tailwind CSS
+
+Architecture
+Getting Started
+Prerequisites
+Node.js (v18+)
+
+PostgreSQL Database
+
+Telegram Bot Token (via BotFather)
+
+Google Gemini API Key
+
+Installation
+Clone the repository:
+
+Bash
+git clone https://github.com/yourusername/classroom-companion.git
+cd classroom-companion
+Install dependencies:
+
+Bash
+npm install
+Configure your environment variables in .env:
+
+Code snippet
+DATABASE_URL="your-postgresql-connection-string"
+TELEGRAM_TOKEN="your-bot-token"
+GEMINI_API_KEY="your-gemini-key"
+Run database migrations:
+
+Bash
+npx prisma db push
+Start the development server:
+
+Bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Workflow
+Registration: Users initialize the bot via /start and designate themselves as TEACHER or STUDENT.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Assignment: The teacher sends a message to the bot. The AI extracts the requirements and notifies the target student.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Submission: The student submits work via the bot (text/files) or their dedicated web portal.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Triage: The teacher reviews the task on the dashboard, utilizing filter tabs to prioritize students who are "Stuck."
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Grading: Upon grading, the system triggers a final notification to the student's device.

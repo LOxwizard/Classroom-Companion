@@ -21,7 +21,7 @@ bot.start(async (ctx) => {
     );
   } else {
     await ctx.reply(
-      `Welcome back, ${name}!\n\nyou are registered as a ${user.role}.\nYou can jump right back into chatting with me, or log into your dashboard at: http://localhost:3000`
+      `Welcome back, ${name}!\n\nYou are registered as a ${user.role}.\nYou can jump right back into chatting with me, or log into your dashboard at: http://localhost:3000`
     );
   }
 });
@@ -65,7 +65,7 @@ bot.on('text', async (ctx) => {
     if (intent.type === 'ASSIGN_WORK' && user.role === 'TEACHER') {
       if (!intent.studentName) {
          await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-          "I couldn't catch the student's name. Please try again!"
+          "I could not catch the student's name. Please try again!"
         );
         return;
       }
@@ -76,7 +76,7 @@ bot.on('text', async (ctx) => {
       
       if (!student) {
         await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-          `I couldn't find a student named "${intent.studentName}" in the system. Make sure they have registered via the bot!`
+          `I could not find a student named "${intent.studentName}" in the system. Make sure they have registered via the bot!`
         );
         return;
       }
@@ -91,7 +91,7 @@ bot.on('text', async (ctx) => {
 
       if (existingTask) {
         await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-          `${student.name} already has this exact task assigned to them, and they haven't completed it yet!`
+          `${student.name} already has this exact task assigned to them, and they have not completed it yet!`
         );
         return;
       }
@@ -99,7 +99,6 @@ bot.on('text', async (ctx) => {
       const deadline = new Date();
       const hoursToAdd = ((intent.deadlineDays || 1) * 24) - 1; 
       deadline.setHours(deadline.getHours() + hoursToAdd);
-
 
       await prisma.assignment.create({
         data: {
@@ -156,7 +155,7 @@ bot.on('text', async (ctx) => {
 
       if (!activeAssignment) {
         await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-          "You don't have any active assignments to submit right now."
+          "You do not have any active assignments to submit right now."
         );
         return;
       }
@@ -175,7 +174,7 @@ bot.on('text', async (ctx) => {
       );
 
       await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-        `Submission received! I've marked it as COMPLETED and sent it to your teacher.`
+        `Submission received! I have marked it as COMPLETED and sent it to your teacher.`
       );
       return;
     }
@@ -187,7 +186,7 @@ bot.on('text', async (ctx) => {
 
       if (allStudents.length === 0) {
         await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-          "You don't have any students registered yet!"
+          "You do not have any students registered yet!"
         );
         return;
       }
@@ -198,7 +197,7 @@ bot.on('text', async (ctx) => {
         try {
           await ctx.telegram.sendMessage(
             student.telegramId, 
-            ` CLASS ANNOUNCEMENT from ${user.name}:\n\n${intent.message}`
+            `CLASS ANNOUNCEMENT from ${user.name}:\n\n${intent.message}`
           );
           successCount++;
         } catch (error) {
@@ -213,7 +212,7 @@ bot.on('text', async (ctx) => {
     }
 
     await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-      "I didn't quite catch that. Try rephrasing what you want to do!"
+      "I did not quite catch that. Try rephrasing what you want to do!"
     );
 
   } catch (error) {
@@ -238,7 +237,7 @@ bot.on(['photo', 'document'], async (ctx) => {
     });
 
     if (!activeAssignment) {
-      await ctx.reply("You don't have any active assignments to submit files for right now!");
+      await ctx.reply("You do not have any active assignments to submit files for right now!");
       return;
     }
 
@@ -267,7 +266,7 @@ bot.on(['photo', 'document'], async (ctx) => {
     );
 
     await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
-      `File securely uploaded! I've marked your assignment as COMPLETED and notified your teacher.`
+      `File securely uploaded! I have marked your assignment as COMPLETED and notified your teacher.`
     );
 
   } catch (error) {
