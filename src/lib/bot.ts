@@ -21,7 +21,7 @@ bot.start(async (ctx) => {
     );
   } else {
     await ctx.reply(
-      `Welcome back, ${name}!\n\nYou are registered as a ${user.role}.\nYou can jump right back into chatting with me, or log into your dashboard at: http://localhost:3000`
+      `Welcome back, ${name}!\n\nYou are registered as a ${user.role}.\nYou can jump right back into chatting with me, or log into your dashboard at: https://classroom-companion-rjf3fd27a-hemanthbitra-projects.vercel.app`
     );
   }
 });
@@ -29,7 +29,7 @@ bot.start(async (ctx) => {
 bot.command('login', async (ctx) => {
   const telegramId = ctx.from.id.toString();
   await ctx.reply(
-    `Your Login ID is: ${telegramId}\n\nYou can log in here: http://localhost:3000`
+    `Your Login ID is: ${telegramId}\n\nYou can log in here: https://classroom-companion-rjf3fd27a-hemanthbitra-projects.vercel.app`
   );
 });
 
