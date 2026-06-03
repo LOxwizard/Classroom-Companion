@@ -26,7 +26,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
 
     await bot.telegram.sendMessage(
       studentTelegramId,
-      `📝 GRADING FEEDBACK:\n\nYour teacher just reviewed your assignment!\n\nFeedback: "${feedback}"`
+      ` GRADING FEEDBACK:\n\nYour teacher just reviewed your assignment!\n\nFeedback: "${feedback}"`
     );
 
     revalidatePath('/teacher');
