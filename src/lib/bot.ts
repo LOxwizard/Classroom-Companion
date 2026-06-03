@@ -62,6 +62,25 @@ bot.on('text', async (ctx) => {
   try {
     const intent = await LLMService.parseIntent(userMessage);
 
+    if (intent.type === 'PROGRESS_UPDATE' && user.role === 'STUDENT') {
+      const active = await prisma.assignment.findFirst({
+        where: { studentId: user.id, status: { not: 'COMPLETED' } },
+        include: { teacher: true }
+      });
+
+      if (active) {
+        await prisma.assignment.update({
+          where: { id: active.id },
+          data: { progress: intent.progressValue }
+        });
+        await ctx.telegram.sendMessage(active.teacher.telegramId, `Progress Update: ${user.name} is at ${intent.progressValue}`);
+        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, `Updated progress to ${intent.progressValue}!`);
+      } else {
+        await ctx.reply("No active assignment found.");
+      }
+      return;
+    }
+
     if (intent.type === 'ASSIGN_WORK' && user.role === 'TEACHER') {
       if (!intent.studentName) {
          await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
@@ -275,11 +294,22 @@ bot.on(['photo', 'document'], async (ctx) => {
   }
 });
 
-bot.launch().then(() => {
-  console.log("Bot is running!");
-}).catch((err) => {
-  console.error("Failed to start bot:", err);
-});
+async function startBot() {
+  try {
+    await bot.launch();
+    console.log("Bot is running!");
+  } catch (err) {
+    console.error("Failed to start bot:", err);
+    process.exit(1);
+  }
+}
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+startBot();
+const stopBot = () => {
+  console.log("Stopping bot...");
+  bot.stop('SIGINT');
+  process.exit(0);
+};
+
+process.once('SIGINT', stopBot);
+process.once('SIGTERM', stopBot);

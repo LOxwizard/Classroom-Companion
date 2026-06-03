@@ -24,6 +24,7 @@ model Assignment {
   description String
   deadline    DateTime
   status      String   @default("PENDING")
+  progress    String?  @default("0%")
   submission  String?
   feedback    String?
   studentId   Int
