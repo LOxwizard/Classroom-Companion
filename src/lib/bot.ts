@@ -51,6 +51,7 @@ bot.on('text', async (ctx) => {
   try {
     const intent = await LLMService.parseIntent(userMessage);
 
+    // --- TEACHER: Assign Work ---
     if (intent.type === 'ASSIGN_WORK' && user.role === 'TEACHER') {
       if (!intent.studentName) {
          await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
@@ -167,6 +168,39 @@ bot.on('text', async (ctx) => {
       return;
     }
 
+    if (intent.type === 'ANNOUNCEMENT' && user.role === 'TEACHER') {
+      const allStudents = await prisma.user.findMany({ 
+        where: { role: 'STUDENT' } 
+      });
+
+      if (allStudents.length === 0) {
+        await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+          "You don't have any students registered yet!"
+        );
+        return;
+      }
+
+      let successCount = 0;
+
+      for (const student of allStudents) {
+        try {
+          await ctx.telegram.sendMessage(
+            student.telegramId, 
+            ` CLASS ANNOUNCEMENT from ${user.name}:\n\n${intent.message}`
+          );
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to message student ${student.name}`);
+        }
+      }
+
+      await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
+        `Announcement successfully sent to ${successCount} students!`
+      );
+      return;
+    }
+
+    // --- UNKNOWN INTENT ---
     await ctx.telegram.editMessageText(ctx.chat.id, loadingMessage.message_id, undefined, 
       "I didn't quite catch that. Try rephrasing what you want to do!"
     );

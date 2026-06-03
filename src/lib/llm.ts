@@ -7,7 +7,7 @@ const geminiClient = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: proc
 export class LLMService {
   static async parseIntent(message: string, provider: string = 'gemini'): Promise<any> {
    const systemPrompt = `You are a strict data extraction assistant. 
-    Analyze the user's message and return a JSON object with a "type" key (ASSIGN_WORK, STATUS_UPDATE, SUBMIT_WORK, or UNKNOWN).
+    Analyze the user's message and return a JSON object with a "type" key (ASSIGN_WORK, STATUS_UPDATE, SUBMIT_WORK, ANNOUNCEMENT, or UNKNOWN).
     
     IF the type is ASSIGN_WORK:
     - "studentName": The name of the student.
@@ -19,6 +19,9 @@ export class LLMService {
 
     IF the type is SUBMIT_WORK:
     - "submissionText": The actual text the user is submitting for their assignment.
+
+    IF the type is ANNOUNCEMENT:
+    - "message": The exact message the teacher wants to broadcast to all students.
     
     Return ONLY valid JSON.`;
     
